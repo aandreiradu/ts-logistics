@@ -1,22 +1,24 @@
-import express, { Request } from "express";
+import express, { Response } from "express";
 import readline from "readline";
-const receiver = process.env.RECEIVER_PORT;
-const app = express();
 import axios from "axios";
+import {
+  AvailableCommandsProps,
+  CustomRequest,
+  CustomResponse,
+} from "./utils/types";
 import { isAmountValid } from "./utils/guards";
+import createServer from "./tests/mockServer";
 
-interface CustomRequest extends Request {
-  body: {
-    type: "pay" | "balance" | "receive";
-    message?: string;
-    data: {
-      amount: number;
-    };
-  };
-}
+const receiver = process.env.RECEIVER_PORT;
+const availableCommands: AvailableCommandsProps[] = ["balance", "pay"];
+
+// let { app, balance } = createServer();
+
+const app = express();
+app.use(express.json());
 
 app.listen(process.env.PORT, () => {
-  console.log("server listening on port 3k", process.env.PORT);
+  console.log("peering started on port:", process.env.PORT);
 
   switch (process.env.PORT) {
     case "3000": {
@@ -36,54 +38,66 @@ const rl = readline.createInterface({
   output: process.stdout,
 });
 
-app.use(express.json());
+let balance: number = 0;
 
 rl.on("line", async (input) => {
   const contentSplitted = input.split(" ");
   const commandType = contentSplitted[0];
-  const amount = contentSplitted[1];
+  const amount = +contentSplitted[1];
 
   switch (commandType) {
     case "pay": {
+      const amountValidity = isAmountValid(amount);
+
+      if (!amountValidity) {
+        console.log("Invalid amount.");
+        return;
+      }
+
       try {
-        const response = await axios({
+        const responseReceiver = await axios({
           method: "POST",
-          url: `http://localhost:${process.env.PORT}`,
+          url: `http://localhost:${receiver}`,
           data: {
-            type: "pay",
+            type: "receive",
             data: {
-              amount: Number(amount),
+              amount: amount,
             },
           },
         });
 
-        console.log("response from /pay endpoint", response.data);
-        console.log(response.data.message);
+        if (responseReceiver.status === 200) {
+          const { message } = responseReceiver?.data || null;
 
-        if (
-          response.status === 200 &&
-          response.data &&
-          response.data.message === "approved"
-        ) {
-          console.log(`Your ${amount}$ payment was approved`);
+          if (!message) {
+            console.log("No message received from BE");
+            throw new Error("Someting went wrong :(. Try again later");
+          }
 
-          const receiverResponse = await axios({
-            method: "POST",
-            url: `http://localhost:${receiver}`,
-            data: {
-              type: "receive",
-              data: {
-                amount: Number(amount),
-              },
-            },
-          });
+          switch (message) {
+            case "approved": {
+              console.log(`Your ${amount}$ payment was approved`);
+              balance -= amount;
+              return;
+            }
 
-          return;
+            case "Invalid amount": {
+              console.log(
+                `Your amount ${amount} is invalid. Please make sure your amount is a positive number`
+              );
+              return;
+            }
+
+            default: {
+              console.log("default reached. Unhandled message", message);
+              throw new Error("Someting went wrong. Please try again");
+            }
+          }
         }
 
-        break;
+        throw new Error("Another status received from BE");
       } catch (error) {
-        console.log("eroare", error);
+        console.log("__error", error);
         if (error instanceof Error) {
           console.log(error.message);
           return;
@@ -94,62 +108,44 @@ rl.on("line", async (input) => {
       }
     }
 
-    case "receive": {
-      console.log("receive switch");
-
-      break;
-    }
-
     case "balance": {
-      const response = await axios({
-        method: "POST",
-        url: `http://localhost:${process.env.PORT}/`,
-        data: {
-          type: commandType,
-        },
-      });
+      try {
+        const response = await axios({
+          method: "POST",
+          url: `http://localhost:${process.env.PORT}/`,
+          data: {
+            type: commandType,
+          },
+        });
 
-      if (response.status === 200 && response.data) {
-        console.log("Your balance is ", response.data.balance, "$");
+        if (response.status === 200 && response.data) {
+          console.log("Your balance is ", response.data?.data.balance, "$");
+        }
+      } catch (error) {
+        console.log("Hmm, something went wrong. Please try again later");
+        return;
       }
       break;
     }
 
     default: {
-      console.log(`I dont know this command.`);
+      console.log(
+        ` 
+        =================
+        I dont know this command. 
+        Available commands: ${[...availableCommands]}
+        =================
+        `
+      );
       break;
     }
   }
 });
 
-let balance: number = 0;
-
-app.post("/", (req: CustomRequest, res, next) => {
+app.post("/", (req: CustomRequest, res: Response<CustomResponse>, next) => {
   const { type } = req.body;
 
   switch (type) {
-    case "pay": {
-      const { amount } = req.body.data;
-      const amountValidity = isAmountValid(amount);
-
-      if (!amountValidity) {
-        console.log("your amount was not valid");
-        return res.status(200).send({
-          message: "Invalid amount",
-        });
-      }
-
-      console.log("your amount was valid");
-      console.log("balance", balance);
-      balance -= amount;
-
-      console.log("new balance is", balance);
-
-      return res.status(200).send({
-        message: "approved",
-      });
-    }
-
     case "receive": {
       const { amount } = req.body.data;
       const amountValidity = isAmountValid(amount);
@@ -164,18 +160,28 @@ app.post("/", (req: CustomRequest, res, next) => {
       console.log("You received", amount, "$");
       return res.status(200).send({
         message: "approved",
+        data: {
+          balance,
+        },
       });
     }
 
     case "balance": {
       return res.status(200).send({
-        balance,
+        data: {
+          balance,
+        },
       });
     }
 
     default: {
       console.log("I dont know this...");
-      break;
+      return res.status(400).send({
+        message: "Invalid command",
+      });
+      // break;
     }
   }
 });
+
+export default app;
