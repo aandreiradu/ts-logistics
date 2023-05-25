@@ -1,21 +1,25 @@
 import express, { Response } from "express";
 import readline from "readline";
-import axios from "axios";
+import { AxiosError } from "axios";
 import {
   AvailableCommandsProps,
   CustomRequest,
   CustomResponse,
 } from "./utils/types";
-import { isAmountValid } from "./utils/guards";
-import createServer from "./tests/mockServer";
+import PeerRelationship from "./peer";
 
 const receiver = process.env.RECEIVER_PORT;
 const availableCommands: AvailableCommandsProps[] = ["balance", "pay"];
 
-// let { app, balance } = createServer();
+if (!receiver) {
+  console.log("Receiver not provided");
+  process.exit(1);
+}
 
 const app = express();
 app.use(express.json());
+
+const peer = new PeerRelationship(+receiver);
 
 app.listen(process.env.PORT, () => {
   console.log("peering started on port:", process.env.PORT);
@@ -38,8 +42,6 @@ const rl = readline.createInterface({
   output: process.stdout,
 });
 
-let balance: number = 0;
-
 rl.on("line", async (input) => {
   const contentSplitted = input.split(" ");
   const commandType = contentSplitted[0];
@@ -47,95 +49,39 @@ rl.on("line", async (input) => {
 
   switch (commandType) {
     case "pay": {
-      const amountValidity = isAmountValid(amount);
-
-      if (!amountValidity) {
-        console.log("Invalid amount.");
-        return;
-      }
-
       try {
-        const responseReceiver = await axios({
-          method: "POST",
-          url: `http://localhost:${receiver}`,
-          data: {
-            type: "receive",
-            data: {
-              amount: amount,
-            },
-          },
-        });
-
-        if (responseReceiver.status === 200) {
-          const { message } = responseReceiver?.data || null;
-
-          if (!message) {
-            console.log("No message received from BE");
-            throw new Error("Someting went wrong :(. Try again later");
-          }
-
-          switch (message) {
-            case "approved": {
-              console.log(`Your ${amount}$ payment was approved`);
-              balance -= amount;
-              return;
-            }
-
-            case "Invalid amount": {
-              console.log(
-                `Your amount ${amount} is invalid. Please make sure your amount is a positive number`
-              );
-              return;
-            }
-
-            default: {
-              console.log("default reached. Unhandled message", message);
-              throw new Error("Someting went wrong. Please try again");
-            }
-          }
+        await peer.pay(amount);
+        console.log(`You\'ve sent ${amount}$`);
+      } catch (error) {
+        if (error instanceof AxiosError) {
+          console.log(error.response?.data.message);
+          return;
         }
 
-        throw new Error("Another status received from BE");
-      } catch (error) {
-        console.log("__error", error);
         if (error instanceof Error) {
           console.log(error.message);
           return;
         }
 
         console.log("Something went wrong :(");
-        return;
       }
+
+      break;
     }
 
     case "balance": {
-      try {
-        const response = await axios({
-          method: "POST",
-          url: `http://localhost:${process.env.PORT}/`,
-          data: {
-            type: commandType,
-          },
-        });
-
-        if (response.status === 200 && response.data) {
-          console.log("Your balance is ", response.data?.data.balance, "$");
-        }
-      } catch (error) {
-        console.log("Hmm, something went wrong. Please try again later");
-        return;
-      }
-      break;
+      console.log("Your balance is ", peer.balance, "$");
+      return;
     }
 
     default: {
       console.log(
         ` 
-        =================
-        I dont know this command. 
-        Available commands: ${[...availableCommands]}
-        =================
-        `
+          =================
+          I dont know this command. 
+          Available commands: ${[...availableCommands]}
+          =================
+          `
       );
       break;
     }
@@ -145,41 +91,26 @@ rl.on("line", async (input) => {
 app.post("/", (req: CustomRequest, res: Response<CustomResponse>, next) => {
   const { type } = req.body;
 
-  switch (type) {
-    case "receive": {
-      const { amount } = req.body.data;
-      const amountValidity = isAmountValid(amount);
+  try {
+    switch (type) {
+      case "receive": {
+        const { amount } = req.body.data;
 
-      if (!amountValidity) {
-        return res.status(200).send({
-          message: "Invalid amount",
-        });
+        peer.receive(amount);
+        console.log(`You received ${amount}$`);
+        return res.status(200).send();
       }
 
-      balance += amount;
-      console.log("You received", amount, "$");
-      return res.status(200).send({
-        message: "approved",
-        data: {
-          balance,
-        },
-      });
+      default: {
+        throw new Error(`Unable to fullfill the request of type ${type}`);
+      }
     }
-
-    case "balance": {
-      return res.status(200).send({
-        data: {
-          balance,
-        },
-      });
-    }
-
-    default: {
-      console.log("I dont know this...");
+  } catch (error) {
+    if (error instanceof Error) {
       return res.status(400).send({
-        message: "Invalid command",
+        message:
+          error.message ?? `Unable to fullfill the request of type ${type}`,
       });
-      // break;
     }
   }
 });

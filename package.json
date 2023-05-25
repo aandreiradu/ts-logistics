@@ -34,6 +34,7 @@
     "ts-jest": "^29.1.0"
   },
   "devDependencies": {
+    "axios-mock-adapter": "^1.21.4",
     "ts-node": "^10.9.1",
     "typescript": "^5.0.4"
   }

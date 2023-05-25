@@ -22,3 +22,11 @@ export interface CustomResponse<T = any> {
 }
 
 export type AvailableCommandsProps = "pay" | "balance";
+
+export type PaymentServiceDTO = {
+  balance: number;
+  amount: number;
+  receiver: string;
+};
+
+export type MockPaymentServiceReturn = {};
