@@ -1,4 +1,3 @@
-import request from "supertest";
 import PeerRelationship from "../peer";
 import AxiosMockAdapter from "axios-mock-adapter";
 import axios, { AxiosError } from "axios";
@@ -32,7 +31,7 @@ describe("PEERING TESTS", () => {
       );
     });
 
-    it("update the sender balance with the amount sent", async () => {
+    it("should update the sender balance with the amount sent", async () => {
       const amount = 30;
       mock
         .onPost(`http://localhost:${receiver}/`, {
@@ -46,13 +45,13 @@ describe("PEERING TESTS", () => {
       expect(peer.balance).toBe(-amount);
     });
 
-    it("update the receiver balance with the amount sent", () => {
+    it("should update the receiver balance with the amount sent", () => {
       const amount = 10;
       peer.receive(amount);
       expect(peer.balance).toBe(amount);
     });
 
-    it("test", async () => {
+    it("should throw an error if the payment service fails", async () => {
       const amount = 30;
       mock
         .onPost(`http://localhost:${receiver}/`, {

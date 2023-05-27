@@ -48,6 +48,17 @@ rl.on("line", async (input) => {
   const amount = +contentSplitted[1];
 
   switch (commandType) {
+    case "help": {
+      console.log(
+        ` 
+          =================
+          Available commands: ${[...availableCommands]}
+          =================
+          `
+      );
+      break;
+    }
+
     case "pay": {
       try {
         await peer.pay(amount);
@@ -70,8 +81,13 @@ rl.on("line", async (input) => {
     }
 
     case "balance": {
-      console.log("Your balance is ", peer.balance, "$");
+      console.log("Your balance is ", peer._balance, "$");
       return;
+    }
+
+    case "exit": {
+      console.log("Goodbye");
+      process.exit(1);
     }
 
     default: {
