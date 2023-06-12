@@ -9,7 +9,11 @@ import {
 import PeerRelationship from "./peer";
 
 const receiver = process.env.RECEIVER_PORT;
-const availableCommands: AvailableCommandsProps[] = ["balance", "pay"];
+const availableCommands: AvailableCommandsProps[] = [
+  "balance",
+  "pay",
+  "request",
+];
 
 if (!receiver) {
   console.log("Receiver not provided");
@@ -85,6 +89,60 @@ rl.on("line", async (input) => {
       return;
     }
 
+    case "request": {
+      try {
+        await peer.request(amount);
+        console.log(`You requested ${amount}$`);
+        return;
+      } catch (error) {
+        if (error instanceof AxiosError) {
+          console.log(error.response?.data.message);
+          return;
+        }
+        if (error instanceof Error) {
+          console.log(error.message);
+          return;
+        }
+
+        console.log("Something went wrong :(");
+      }
+      break;
+    }
+
+    case "yes": {
+      try {
+        const amount = peer.retrievePendingAmount;
+
+        await peer.pay(amount);
+        console.log(`You\'ve sent ${amount}$`);
+      } catch (error) {
+        if (error instanceof Error) {
+          console.log(error.message);
+          return;
+        }
+
+        console.log("Something went wrong :(");
+      }
+      break;
+    }
+
+    case "cancel": {
+      try {
+        peer.retrievePendingAmount;
+
+        peer.cancelPendingRequest();
+        console.log("Pending request cancelled");
+      } catch (error) {
+        if (error instanceof Error) {
+          console.log(error.message);
+          return;
+        }
+
+        console.log("Something went wrong :(");
+      }
+      break;
+    }
+
     case "exit": {
       console.log("Goodbye");
       process.exit(1);
@@ -104,31 +162,53 @@ rl.on("line", async (input) => {
   }
 });
 
-app.post("/", (req: CustomRequest, res: Response<CustomResponse>, next) => {
-  const { type } = req.body;
+app.post(
+  "/",
+  async (req: CustomRequest, res: Response<CustomResponse>, next) => {
+    const { type } = req.body;
 
-  try {
-    switch (type) {
-      case "receive": {
-        const { amount } = req.body.data;
+    try {
+      switch (type) {
+        case "receive": {
+          const { amount } = req.body.data;
 
-        peer.receive(amount);
-        console.log(`You received ${amount}$`);
-        return res.status(200).send();
+          peer.receive(amount);
+          console.log(`You received ${amount}$`);
+          return res.status(200).send();
+        }
+
+        case "request": {
+          const { amount } = req.body.data;
+
+          peer.setPendingRequest(amount);
+
+          rl.question(
+            `Someone requested ${amount}$.\nType yes to send money or cancel to cancel the request\n`,
+            async (answear) => {
+              console.log("answear", answear);
+
+              if (answear === "yes") {
+                await peer.pay(amount);
+              }
+            }
+          );
+
+          return res.status(200).send();
+        }
+
+        default: {
+          throw new Error(`Unable to fullfill the request of type ${type}`);
+        }
       }
-
-      default: {
-        throw new Error(`Unable to fullfill the request of type ${type}`);
+    } catch (error) {
+      if (error instanceof Error) {
+        return res.status(400).send({
+          message:
+            error.message ?? `Unable to fullfill the request of type ${type}`,
+        });
       }
-    }
-  } catch (error) {
-    if (error instanceof Error) {
-      return res.status(400).send({
-        message:
-          error.message ?? `Unable to fullfill the request of type ${type}`,
-      });
     }
   }
-});
+);
 
 export default app;

@@ -2,7 +2,7 @@ import { Request } from "express";
 
 export interface CustomRequest extends Request {
   body: {
-    type: "pay" | "balance" | "receive";
+    type: "pay" | "balance" | "receive" | "request";
     message?: string;
     data: {
       amount: number;
@@ -21,7 +21,7 @@ export interface CustomResponse<T = any> {
   };
 }
 
-export type AvailableCommandsProps = "pay" | "balance";
+export type AvailableCommandsProps = "pay" | "balance" | "request";
 
 export type PaymentServiceDTO = {
   balance: number;
