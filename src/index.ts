@@ -109,40 +109,6 @@ rl.on("line", async (input) => {
       break;
     }
 
-    case "yes": {
-      try {
-        const amount = peer.retrievePendingAmount;
-
-        await peer.pay(amount);
-        console.log(`You\'ve sent ${amount}$`);
-      } catch (error) {
-        if (error instanceof Error) {
-          console.log(error.message);
-          return;
-        }
-
-        console.log("Something went wrong :(");
-      }
-      break;
-    }
-
-    case "cancel": {
-      try {
-        peer.retrievePendingAmount;
-
-        peer.cancelPendingRequest();
-        console.log("Pending request cancelled");
-      } catch (error) {
-        if (error instanceof Error) {
-          console.log(error.message);
-          return;
-        }
-
-        console.log("Something went wrong :(");
-      }
-      break;
-    }
-
     case "exit": {
       console.log("Goodbye");
       process.exit(1);
@@ -180,8 +146,6 @@ app.post(
         case "request": {
           const { amount } = req.body.data;
 
-          peer.setPendingRequest(amount);
-
           rl.question(
             `Someone requested ${amount}$.\nType yes to send money or cancel to cancel the request\n`,
             async (answear) => {
@@ -189,7 +153,16 @@ app.post(
 
               if (answear === "yes") {
                 await peer.pay(amount);
+                return;
               }
+
+              if (answear === "cancel") {
+                console.log("the other party cancelled the request");
+                return;
+              }
+
+              console.log("unknown command. cancel the request");
+              return;
             }
           );
 

@@ -142,6 +142,8 @@ packages/backend/src/routes/test.ts
 
 dbml
 
-.DS_Store
-
+/.DS_Store
+../.DS_Store
+./DS_Store
+/.DS_Store
 AndreiRadu_TS_Challenge.zip
